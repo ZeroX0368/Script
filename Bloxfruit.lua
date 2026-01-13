@@ -11939,3 +11939,4 @@ end
 
 -- Nghe khi có skill mới
 workspace.DescendantAdded:Connect(rainbowSkill)
+
