@@ -1,58 +1,67 @@
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+local Window = Library.CreateLib("Driving Empire - Auto Money", "Midnight")
 
--- // Cấu hình tham số // --
-local Config = {
-    ParryRange = 25,       -- Khoảng cách để tự kích hoạt đỡ
-    SpamRange = 12,        -- Khoảng cách cực gần để bắt đầu Spam (phòng thủ tốc độ cao)
-    DebugMode = true       -- Hiện thông báo trong F9 khi đỡ thành công
+-- Variables
+local _G = {
+    AutoFarm = false,
+    FarmSpeed = 200 -- Tốc độ cày (Đừng để quá cao kẻo văng khỏi map)
 }
 
--- // Tìm Remote điều khiển việc đỡ bóng // --
-local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ParryButton")
+-- Main Tab
+local Main = Window:NewTab("Main")
+local Section = Main:NewSection("Auto Money (Miles)")
 
--- // Hàm kiểm tra xem bóng có đang hướng về phía mình không // --
-local function isBallTargetingMe(ball)
-    -- Kiểm tra thuộc tính target của bóng (Blade Ball thường lưu ở đây)
-    return ball:GetAttribute("Target") == LocalPlayer.Name
-end
-
--- // Vòng lặp chính // --
-RunService.PreRender:Connect(function()
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+Section:NewToggle("Auto Farm Money", "Tự động lái xe để kiếm tiền", function(state)
+    _G.AutoFarm = state
     
-    local root = char.HumanoidRootPart
-    local ballsFolder = workspace:FindFirstChild("Balls")
-    
-    if ballsFolder then
-        for _, ball in pairs(ballsFolder:GetChildren()) do
-            -- Chỉ xử lý nếu bóng là bóng đang thi đấu (Real Ball)
-            if ball:GetAttribute("IsRealBall") == true then
-                local distance = (ball.Position - root.Position).Magnitude
-                local velocity = ball.AssemblyLinearVelocity.Magnitude
+    if state then
+        spawn(function()
+            while _G.AutoFarm do
+                local char = game.Players.LocalPlayer.Character
+                local veh = char and char:FindFirstChild("Humanoid") and char.Humanoid.SeatPart and char.Humanoid.SeatPart.Parent
                 
-                -- Tính toán thời gian bóng chạm vào người dựa trên vận tốc
-                -- Càng nhanh thì khoảng cách kích hoạt phải càng xa một chút
-                local dynamicRange = math.clamp(velocity * 0.15, Config.SpamRange, Config.ParryRange)
-
-                if isBallTargetingMe(ball) then
-                    -- 1. Chế độ Auto Spam (Khi bóng cực gần và bay cực nhanh)
-                    if distance <= Config.SpamRange then
-                        Remote:FireServer()
-                        if Config.DebugMode then print("🔥 SPAM PARRY!") end
-                    
-                    -- 2. Chế độ Auto Parry (Bình thường)
-                    elseif distance <= dynamicRange then
-                        Remote:FireServer()
-                        if Config.DebugMode then print("🛡️ AUTO PARRY - Khoảng cách: " .. math.floor(distance)) end
-                    end
+                if veh and veh:IsA("Model") then
+                    -- Di chuyển xe về phía trước
+                    veh:PivotTo(veh:GetPivot() * CFrame.new(0, 0, -(_G.FarmSpeed / 10)))
+                else
+                    print("Vui lòng ngồi vào xe để bắt đầu Farm!")
                 end
+                task.wait(0.01)
             end
-        end
+        end)
     end
 end)
 
-print("✅ Script Auto Parry & Spam đã kích hoạt thành công!")
+Section:NewSlider("Farm Speed", "Điều chỉnh tốc độ cày tiền", 300, 50, function(s)
+    _G.FarmSpeed = s
+end)
+
+-- Teleport Tab
+local Teleport = Window:NewTab("Teleport")
+local TPSection = Teleport:NewSection("Dịch chuyển nhanh")
+
+TPSection:NewButton("Dealership", "Đến cửa hàng xe", function()
+    game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-650, 5, 550)
+end)
+
+TPSection:NewButton("Race Track", "Đến đường đua", function()
+    game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(1200, 5, -2500)
+end)
+
+-- Settings Tab
+local Settings = Window:NewTab("Settings")
+local SSection = Settings:NewSection("Hệ thống")
+
+SSection:NewKeybind("Đóng/Mở Menu", "Phím tắt menu", Enum.KeyCode.RightControl, function()
+    Library:ToggleUI()
+end)
+
+SSection:NewButton("Anti-AFK", "Tránh bị văng game khi treo máy", function()
+    local vu = game:GetService("VirtualUser")
+    game:GetService("Players").LocalPlayer.Idled:Connect(function()
+        vu:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+        wait(1)
+        vu:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+    end)
+    print("Đã bật Anti-AFK")
+end)
