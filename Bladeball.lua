@@ -1,67 +1,78 @@
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
-local Window = Library.CreateLib("Driving Empire - Auto Money", "Midnight")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local request = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
 
--- Variables
-local _G = {
-    AutoFarm = false,
-    FarmSpeed = 200 -- Tốc độ cày (Đừng để quá cao kẻo văng khỏi map)
-}
+-- // CẤU HÌNH // --
+local Webhook_URL = "https://discord.com/api/webhooks/1370529951052468295/KYT9QTHy5rrsYAkwKpMKeeYO4Db5X9YkrT5qOrudk0SGcyIbXsHO4s1tLAPHQL77k0fK"
+local Auto_Hop = true -- Tự động nhảy server sau khi thông báo hoặc không tìm thấy
 
--- Main Tab
-local Main = Window:NewTab("Main")
-local Section = Main:NewSection("Auto Money (Miles)")
-
-Section:NewToggle("Auto Farm Money", "Tự động lái xe để kiếm tiền", function(state)
-    _G.AutoFarm = state
-    
-    if state then
-        spawn(function()
-            while _G.AutoFarm do
-                local char = game.Players.LocalPlayer.Character
-                local veh = char and char:FindFirstChild("Humanoid") and char.Humanoid.SeatPart and char.Humanoid.SeatPart.Parent
-                
-                if veh and veh:IsA("Model") then
-                    -- Di chuyển xe về phía trước
-                    veh:PivotTo(veh:GetPivot() * CFrame.new(0, 0, -(_G.FarmSpeed / 10)))
-                else
-                    print("Vui lòng ngồi vào xe để bắt đầu Farm!")
-                end
-                task.wait(0.01)
-            end
-        end)
+-- // Hàm lấy danh sách Server để Hop // --
+function serverHop()
+    local sfUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    local function getServers(cursor)
+        return HttpService:JSONDecode(game:HttpGet(sfUrl .. (cursor and "&cursor=" .. cursor or "")))
     end
-end)
 
-Section:NewSlider("Farm Speed", "Điều chỉnh tốc độ cày tiền", 300, 50, function(s)
-    _G.FarmSpeed = s
-end)
+    local server = getServers()
+    for _, s in pairs(server.data) do
+        if s.playing < s.maxPlayers and s.id ~= game.JobId then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id)
+            break
+        end
+    end
+end
 
--- Teleport Tab
-local Teleport = Window:NewTab("Teleport")
-local TPSection = Teleport:NewSection("Dịch chuyển nhanh")
+-- // Hàm gửi thông báo Webhook // --
+function sendWebhook(fruitName)
+    local data = {
+        ["embeds"] = {{
+            ["title"] = "🍎 FRUIT SPAWN NOTIFIER",
+            ["description"] = "Đã tìm thấy trái ác quỷ mới trong Server!",
+            ["color"] = 16711680,
+            ["fields"] = {
+                {["name"] = "🍎 Fruit Name:", ["value"] = "```" .. fruitName .. "```", ["inline"] = false},
+                {["name"] = "🌍 Location (Sea):", ["value"] = "```" .. tostring(game:GetService("Workspace").Map:GetAttribute("Sea") or "Unknown") .. "```", ["inline"] = true},
+                {["name"] = "👥 Players:", ["value"] = "```" .. #game.Players:GetPlayers() .. "/" .. game.MaxPlayers .. "```", ["inline"] = true},
+                {["name"] = "🆔 Job ID:", ["value"] = "```" .. game.JobId .. "```", ["inline"] = false},
+                {["name"] = "📜 Script Join:", ["value"] = "```game:GetService('TeleportService'):TeleportToPlaceInstance("..game.PlaceId..", '"..game.JobId.."')```", ["inline"] = false}
+            },
+            ["footer"] = {["text"] = "Blox Fruit Finder • " .. os.date("%X")},
+            ["image"] = {["url"] = "https://i.imgur.com/your_image_id.png"} -- Có thể thay link ảnh minh họa
+        }}
+    }
 
-TPSection:NewButton("Dealership", "Đến cửa hàng xe", function()
-    game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-650, 5, 550)
-end)
+    if request then
+        request({
+            Url = Webhook_URL,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HttpService:JSONEncode(data)
+        })
+    end
+end
 
-TPSection:NewButton("Race Track", "Đến đường đua", function()
-    game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(1200, 5, -2500)
-end)
+-- // Kiểm tra Fruit trong Workspace // --
+function checkFruit()
+    local found = false
+    for _, v in pairs(game.Workspace:GetChildren()) do
+        if v:IsA("Tool") and (string.find(v.Name, "Fruit") or v:FindFirstChild("Handle")) then
+            sendWebhook(v.Name)
+            found = true
+            print("Đã tìm thấy: " .. v.Name)
+            wait(5) -- Đợi gửi xong webhook
+            break
+        end
+    end
 
--- Settings Tab
-local Settings = Window:NewTab("Settings")
-local SSection = Settings:NewSection("Hệ thống")
+    if not found then
+        print("Không tìm thấy trái nào. Đang chuẩn bị nhảy Server...")
+    end
 
-SSection:NewKeybind("Đóng/Mở Menu", "Phím tắt menu", Enum.KeyCode.RightControl, function()
-    Library:ToggleUI()
-end)
+    if Auto_Hop then
+        serverHop()
+    end
+end
 
-SSection:NewButton("Anti-AFK", "Tránh bị văng game khi treo máy", function()
-    local vu = game:GetService("VirtualUser")
-    game:GetService("Players").LocalPlayer.Idled:Connect(function()
-        vu:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
-        wait(1)
-        vu:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
-    end)
-    print("Đã bật Anti-AFK")
-end)
+-- Chạy kiểm tra sau khi vào game
+task.wait(5)
+checkFruit()
