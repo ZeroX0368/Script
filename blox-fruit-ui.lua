@@ -25,7 +25,6 @@ local CHECK_INTERVAL = 60
 local SEND_COOLDOWN = 4 * 60 * 60 -- 4 giờ
 
 --// STATE
-local lastStockHash = nil
 local lastSendTime = 0
 local wasEmptyStock = false
 
@@ -33,18 +32,6 @@ local wasEmptyStock = false
 local function formatNumber(n)
     local s = tostring(n)
     return s:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
-end
-
---// HASH STOCK
-local function getStockHash(stockTable)
-    local list = {}
-    for _, fruit in pairs(stockTable) do
-        if fruit.OnSale then
-            table.insert(list, fruit.Name .. ":" .. fruit.Price)
-        end
-    end
-    table.sort(list)
-    return table.concat(list, "|")
 end
 
 --// MAIN
@@ -57,7 +44,7 @@ local function sendToDiscord()
     end)
 
     if not success or not fruitData then
-        warn("❌ Không thể lấy dữ liệu stock")
+        warn("❌ Không thể lấy stock")
         return
     end
 
@@ -69,7 +56,7 @@ local function sendToDiscord()
         end
     end
 
-    -- DETECT RESET NORMAL STOCK
+    -- RESET NORMAL STOCK
     local isReset = false
     if wasEmptyStock and count > 0 then
         isReset = true
@@ -77,36 +64,25 @@ local function sendToDiscord()
     end
     wasEmptyStock = (count == 0)
 
-    -- HASH
-    local currentHash = getStockHash(fruitData)
-
-    -- ANTI DUP (bỏ qua nếu reset)
-    if not isReset and currentHash == lastStockHash then
-        warn("⚠️ Stock không đổi → bỏ qua")
+    if count == 0 then
+        warn("⚠️ Shop trống")
         return
     end
 
     -- 4H LIMIT (bỏ qua nếu reset)
     if not isReset and os.time() - lastSendTime < SEND_COOLDOWN then
         warn("⏳ Chưa đủ 4h → không gửi")
-        lastStockHash = currentHash
         return
     end
 
-    lastStockHash = currentHash
     lastSendTime = os.time()
-
-    if count == 0 then
-        warn("⚠️ Shop đang trống")
-        return
-    end
 
     -- BUILD LIST
     local stockList = ""
     for _, fruit in pairs(fruitData) do
         if fruit.OnSale then
             stockList ..= "🍎 **" .. fruit.Name ..
-                "** — `$" .. formatNumber(fruit.Price) .. "`\n"
+                "** — 💰 `$" .. formatNumber(fruit.Price) .. "`\n"
         end
     end
 
@@ -119,11 +95,11 @@ local function sendToDiscord()
     local data = {
         embeds = {{
             title = isReset
-                and "♻️ BLOX FRUITS STOCK RESET"
+                and "♻️ BLOX FRUITS NORMAL STOCK RESET"
                 or "🛒 BLOX FRUITS STOCK UPDATE",
 
             description = isReset
-                and "🔄 **Normal Stock vừa reset!**"
+                and "🔄 **Normal Stock vừa reset**"
                 or "📦 **Danh sách trái đang bán:**",
 
             color = isReset and 16753920 or 65280,
