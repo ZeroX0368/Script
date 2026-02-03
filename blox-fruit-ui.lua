@@ -3,7 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
---// HTTP REQUEST (đa executor)
+--// HTTP REQUEST
 local requestFunc =
     (syn and syn.request)
     or (http and http.request)
@@ -21,10 +21,12 @@ local WEBHOOK_URL = "https://discord.com/api/webhooks/1353511267889053767/AAHMBV
 local THUMBNAIL_URL = "https://cdn.discordapp.com/avatars/1142053791781355561/e599a27cab1ca92a444ed2839adbb4f9.webp?size=1024"
 local IMAGE_URL = "https://cdn.discordapp.com/banners/1205613504808357888/a_fef2751c07efa7a14abe0e968bdac50f.gif?size=2048"
 
-local CHECK_INTERVAL = 60 -- giây
+local CHECK_INTERVAL = 60
+local SEND_COOLDOWN = 4 * 60 * 60 -- 4 giờ
 
---// ANTI DUP
+--// STATE
 local lastStockHash = nil
+local lastSendTime = 0
 local wasEmptyStock = false
 
 --// FORMAT NUMBER
@@ -45,7 +47,7 @@ local function getStockHash(stockTable)
     return table.concat(list, "|")
 end
 
---// SEND DISCORD
+--// MAIN
 local function sendToDiscord()
     local success, fruitData = pcall(function()
         return ReplicatedStorage
@@ -55,41 +57,47 @@ local function sendToDiscord()
     end)
 
     if not success or not fruitData then
-        warn("❌ Không thể lấy dữ liệu Stock")
+        warn("❌ Không thể lấy dữ liệu stock")
         return
     end
 
-    -- Đếm trái đang bán
-    local sellingCount = 0
+    -- COUNT
+    local count = 0
     for _, fruit in pairs(fruitData) do
         if fruit.OnSale then
-            sellingCount += 1
+            count += 1
         end
     end
+
+    -- DETECT RESET NORMAL STOCK
+    local isReset = false
+    if wasEmptyStock and count > 0 then
+        isReset = true
+        warn("♻️ RESET NORMAL STOCK detected")
+    end
+    wasEmptyStock = (count == 0)
 
     -- HASH
     local currentHash = getStockHash(fruitData)
 
-    -- PHÁT HIỆN RESET STOCK
-    local isReset = false
-    if wasEmptyStock and sellingCount > 0 then
-        warn("♻️ RESET STOCK detected")
-        lastStockHash = nil
-        isReset = true
+    -- ANTI DUP (bỏ qua nếu reset)
+    if not isReset and currentHash == lastStockHash then
+        warn("⚠️ Stock không đổi → bỏ qua")
+        return
     end
 
-    wasEmptyStock = (sellingCount == 0)
-
-    -- ANTI DUP
-    if currentHash == lastStockHash then
-        warn("⚠️ Stock không đổi → bỏ qua gửi Discord")
+    -- 4H LIMIT (bỏ qua nếu reset)
+    if not isReset and os.time() - lastSendTime < SEND_COOLDOWN then
+        warn("⏳ Chưa đủ 4h → không gửi")
+        lastStockHash = currentHash
         return
     end
 
     lastStockHash = currentHash
+    lastSendTime = os.time()
 
-    if sellingCount == 0 then
-        warn("⚠️ Không có trái nào đang bán")
+    if count == 0 then
+        warn("⚠️ Shop đang trống")
         return
     end
 
@@ -98,23 +106,24 @@ local function sendToDiscord()
     for _, fruit in pairs(fruitData) do
         if fruit.OnSale then
             stockList ..= "🍎 **" .. fruit.Name ..
-                "** — 💰 `$" .. formatNumber(fruit.Price) .. "`\n"
+                "** — `$" .. formatNumber(fruit.Price) .. "`\n"
         end
     end
 
     -- SERVER INFO
     local playerCount = #Players:GetPlayers()
     local maxPlayers = Players.MaxPlayers
-    local jobId = string.sub(game.JobId, 1, 18) .. "..."
+    local jobId = game.JobId
 
     -- EMBED
     local data = {
         embeds = {{
-            title = isReset and "♻️ BLOX FRUITS STOCK RESET"
+            title = isReset
+                and "♻️ BLOX FRUITS STOCK RESET"
                 or "🛒 BLOX FRUITS STOCK UPDATE",
 
             description = isReset
-                and "🔄 **Shop vừa reset stock!**"
+                and "🔄 **Normal Stock vừa reset!**"
                 or "📦 **Danh sách trái đang bán:**",
 
             color = isReset and 16753920 or 65280,
@@ -124,7 +133,7 @@ local function sendToDiscord()
 
             fields = {
                 {
-                    name = "🍏 Danh sách Trái (" .. sellingCount .. " loại)",
+                    name = "🍏 Danh sách Trái (" .. count .. " loại)",
                     value = stockList,
                     inline = false
                 },
@@ -147,9 +156,7 @@ local function sendToDiscord()
     requestFunc({
         Url = WEBHOOK_URL,
         Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json"
-        },
+        Headers = { ["Content-Type"] = "application/json" },
         Body = HttpService:JSONEncode(data)
     })
 
@@ -163,5 +170,5 @@ task.spawn(function()
     end
 end)
 
---// RUN FIRST
+--// FIRST RUN
 sendToDiscord()
