@@ -8,6 +8,6 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroX0368/Script/refs
 
 https://wrdcdn.net/r/103473/1769404797647/JJSploit-arm64vng.apk
 
-https://ads.quartyz.com/lootlabs?hash=0ec2ca77dc23b473f6c8b26408557222
+https://ads.quartyz.com/linkvertise?hash=SFJnQdd2dkeDu3v6P6khgus0YRmO3mYroFL7tX77tRvChba1Cs8C2OLRCa1Utxgs
 
 https://wearedevs.net/d/Krnl
