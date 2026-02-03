@@ -1,13 +1,19 @@
 --// SERVICES
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 
 --// HTTP REQUEST (đa executor)
-local request = (syn and syn.request)
+local requestFunc =
+    (syn and syn.request)
     or (http and http.request)
     or http_request
     or (fluxus and fluxus.request)
-    or request
+
+if not requestFunc then
+    warn("❌ Executor không hỗ trợ HttpRequest")
+    return
+end
 
 --// CONFIG
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT"
@@ -15,24 +21,31 @@ local WEBHOOK_URL = "https://discord.com/api/webhooks/1353511267889053767/AAHMBV
 local THUMBNAIL_URL = "https://cdn.discordapp.com/avatars/1142053791781355561/e599a27cab1ca92a444ed2839adbb4f9.webp?size=1024"
 local IMAGE_URL = "https://cdn.discordapp.com/banners/1205613504808357888/a_fef2751c07efa7a14abe0e968bdac50f.gif?size=2048"
 
---// ANTI DUP (runtime)
-local lastStockHash = nil
+local CHECK_INTERVAL = 60 -- giây
 
---// HASH STOCK (chống gửi trùng)
+--// ANTI DUP
+local lastStockHash = nil
+local wasEmptyStock = false
+
+--// FORMAT NUMBER
+local function formatNumber(n)
+    local s = tostring(n)
+    return s:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+end
+
+--// HASH STOCK
 local function getStockHash(stockTable)
     local list = {}
-
     for _, fruit in pairs(stockTable) do
         if fruit.OnSale then
             table.insert(list, fruit.Name .. ":" .. fruit.Price)
         end
     end
-
     table.sort(list)
     return table.concat(list, "|")
 end
 
---// MAIN FUNCTION
+--// SEND DISCORD
 local function sendToDiscord()
     local success, fruitData = pcall(function()
         return ReplicatedStorage
@@ -46,70 +59,92 @@ local function sendToDiscord()
         return
     end
 
-    -- 🔒 Check trùng stock
-    local currentHash = getStockHash(fruitData)
-    if currentHash == lastStockHash then
-        warn("⚠️ Stock không đổi → Bỏ qua gửi Discord")
-        return
-    end
-    lastStockHash = currentHash
-
-    local stockList = ""
-    local count = 0
-
+    -- Đếm trái đang bán
+    local sellingCount = 0
     for _, fruit in pairs(fruitData) do
         if fruit.OnSale then
-            count += 1
-            stockList ..= "🍎 **" .. fruit.Name .. "** — `$" .. fruit.Price .. "`\n"
+            sellingCount += 1
         end
     end
 
-    if count == 0 then
+    -- HASH
+    local currentHash = getStockHash(fruitData)
+
+    -- PHÁT HIỆN RESET STOCK
+    local isReset = false
+    if wasEmptyStock and sellingCount > 0 then
+        warn("♻️ RESET STOCK detected")
+        lastStockHash = nil
+        isReset = true
+    end
+
+    wasEmptyStock = (sellingCount == 0)
+
+    -- ANTI DUP
+    if currentHash == lastStockHash then
+        warn("⚠️ Stock không đổi → bỏ qua gửi Discord")
+        return
+    end
+
+    lastStockHash = currentHash
+
+    if sellingCount == 0 then
         warn("⚠️ Không có trái nào đang bán")
         return
     end
 
-    --// EMBED DATA
+    -- BUILD LIST
+    local stockList = ""
+    for _, fruit in pairs(fruitData) do
+        if fruit.OnSale then
+            stockList ..= "🍎 **" .. fruit.Name ..
+                "** — 💰 `$" .. formatNumber(fruit.Price) .. "`\n"
+        end
+    end
+
+    -- SERVER INFO
+    local playerCount = #Players:GetPlayers()
+    local maxPlayers = Players.MaxPlayers
+    local jobId = string.sub(game.JobId, 1, 18) .. "..."
+
+    -- EMBED
     local data = {
         embeds = {{
-            title = "🛒 BLOX FRUITS STOCK NOTIFIER",
-            description = "Danh sách các trái ác quỷ đang bán trong Shop hiện tại:",
-            color = 65280,
+            title = isReset and "♻️ BLOX FRUITS STOCK RESET"
+                or "🛒 BLOX FRUITS STOCK UPDATE",
 
-            thumbnail = {
-                url = THUMBNAIL_URL
-            },
+            description = isReset
+                and "🔄 **Shop vừa reset stock!**"
+                or "📦 **Danh sách trái đang bán:**",
 
-            image = {
-                url = IMAGE_URL
-            },
+            color = isReset and 16753920 or 65280,
+
+            thumbnail = { url = THUMBNAIL_URL },
+            image = { url = IMAGE_URL },
 
             fields = {
                 {
-                    name = "🍏 Danh sách Trái (" .. count .. " loại)",
+                    name = "🍏 Danh sách Trái (" .. sellingCount .. " loại)",
                     value = stockList,
                     inline = false
                 },
                 {
-                    name = "🖥 Server Info",
-                    value = "JobId: `" .. game.JobId .. "`",
+                    name = "🖥️ Server Info",
+                    value =
+                        "🆔 **JobId:** `" .. jobId .. "`\n" ..
+                        "👥 **Players:** `" .. playerCount .. "/" .. maxPlayers .. "`",
                     inline = false
                 }
             },
 
             footer = {
-                text = "Blox Fruits Stock Checker • " .. os.date("%d/%m/%Y %H:%M:%S")
+                text = "⚡ Stock Notifier • " .. os.date("%d/%m/%Y %H:%M:%S")
             }
         }}
     }
 
-    --// SEND WEBHOOK
-    if not request then
-        warn("❌ Executor không hỗ trợ HttpRequest")
-        return
-    end
-
-    request({
+    task.wait(1)
+    requestFunc({
         Url = WEBHOOK_URL,
         Method = "POST",
         Headers = {
@@ -118,8 +153,15 @@ local function sendToDiscord()
         Body = HttpService:JSONEncode(data)
     })
 
-    print("✅ Đã gửi stock mới lên Discord")
+    print("✅ Đã gửi stock lên Discord")
 end
 
---// RUN ONCE
+--// LOOP
+task.spawn(function()
+    while task.wait(CHECK_INTERVAL) do
+        sendToDiscord()
+    end
+end)
+
+--// RUN FIRST
 sendToDiscord()
