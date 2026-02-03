@@ -6,7 +6,14 @@ local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 
 local LP = Players.LocalPlayer
-local Char = LP.Character or LP.CharacterAdded:Wait()
+local Char, HRP
+
+local function BindCharacter(c)
+    Char = c
+    HRP = c:WaitForChild("HumanoidRootPart")
+end
+BindCharacter(LP.Character or LP.CharacterAdded:Wait())
+LP.CharacterAdded:Connect(BindCharacter)
 
 --// ================== REQUEST ==================
 local request =
@@ -19,71 +26,83 @@ local request =
 local WEBHOOK = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT"
 local AUTO_FARM = true
 local AUTO_STAT = true
-local CHECK_STOCK_DELAY = 10 -- giây
+local CHECK_STOCK_DELAY = 30 -- giây
 
 --// ================== UTIL ==================
 local function SendWebhook(title, desc)
     if not request then return end
-    local data = {
-        embeds = {{
-            title = title,
-            description = desc,
-            color = 0x00ff99,
-            footer = { text = "Blox Fruits Auto Farm • "..os.date("%X") }
-        }}
-    }
     request({
         Url = WEBHOOK,
         Method = "POST",
-        Headers = {["Content-Type"]="application/json"},
-        Body = HttpService:JSONEncode(data)
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode({
+            embeds = {{
+                title = title,
+                description = desc,
+                color = 0x00ff99,
+                footer = {
+                    text = "Blox Fruits Auto Farm • "..os.date("%X")
+                }
+            }}
+        })
     })
 end
 
 --// ================== ANTI AFK ==================
 LP.Idled:Connect(function()
-    VirtualUser:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+    VirtualUser:Button2Down(Vector2.new(), workspace.CurrentCamera.CFrame)
     task.wait(1)
-    VirtualUser:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+    VirtualUser:Button2Up(Vector2.new(), workspace.CurrentCamera.CFrame)
 end)
 
---// ================== EQUIP COMBAT ==================
-local function EquipCombat()
-    local tool = LP.Backpack:FindFirstChild("Combat")
+--// ================== EQUIP ==================
+local function EquipTool()
+    local tool = LP.Backpack:FindFirstChildOfClass("Tool")
     if tool then
         tool.Parent = Char
     end
 end
 
+--// ================== FIND MOB ==================
+local function GetNearestMob()
+    local nearest, dist = nil, math.huge
+    for _,v in pairs(workspace.Enemies:GetChildren()) do
+        local hum = v:FindFirstChild("Humanoid")
+        local hrp = v:FindFirstChild("HumanoidRootPart")
+        if hum and hrp and hum.Health > 0 then
+            local d = (HRP.Position - hrp.Position).Magnitude
+            if d < dist then
+                dist = d
+                nearest = v
+            end
+        end
+    end
+    return nearest
+end
+
 --// ================== AUTO CLICK ==================
 task.spawn(function()
-    while task.wait(0.1) do
+    while task.wait(0.25) do
         if AUTO_FARM then
-            VirtualUser:Button1Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
-            VirtualUser:Button1Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+            VirtualUser:Button1Down(Vector2.new(), workspace.CurrentCamera.CFrame)
+            task.wait()
+            VirtualUser:Button1Up(Vector2.new(), workspace.CurrentCamera.CFrame)
         end
     end
 end)
 
---// ================== FIND MOB ==================
-local function GetMob()
-    for _,v in pairs(workspace.Enemies:GetChildren()) do
-        if v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
-            return v
-        end
-    end
-end
-
 --// ================== AUTO FARM ==================
 task.spawn(function()
     while task.wait() do
-        if not AUTO_FARM then continue end
+        if not AUTO_FARM or not HRP then continue end
         pcall(function()
-            EquipCombat()
-            local mob = GetMob()
+            EquipTool()
+            local mob = GetNearestMob()
             if mob and mob:FindFirstChild("HumanoidRootPart") then
-                Char.HumanoidRootPart.CFrame =
-                    mob.HumanoidRootPart.CFrame * CFrame.new(0,0,2)
+                local mhrp = mob.HumanoidRootPart
+                mhrp.Anchored = true
+                mhrp.CanCollide = false
+                HRP.CFrame = mhrp.CFrame * CFrame.new(0, 5, 0)
             end
         end)
     end
@@ -91,9 +110,13 @@ end)
 
 --// ================== AUTO STAT ==================
 task.spawn(function()
-    while task.wait(2) do
-        if AUTO_STAT then
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("AddPoint","Melee",1)
+    while task.wait(5) do
+        if AUTO_STAT and LP.Data:FindFirstChild("Points") then
+            local pts = LP.Data.Points.Value
+            if pts > 0 then
+                ReplicatedStorage.Remotes.CommF_:InvokeServer("AddPoint","Melee",1)
+                ReplicatedStorage.Remotes.CommF_:InvokeServer("AddPoint","Defense",1)
+            end
         end
     end
 end)
@@ -104,7 +127,8 @@ task.spawn(function()
     while task.wait(1) do
         local lv = LP.Data.Level.Value
         if lv > lastLevel then
-            SendWebhook("⬆️ LÊN LEVEL",
+            SendWebhook(
+                "⬆️ LÊN LEVEL",
                 "**Level:** "..lv..
                 "\n**Sea:** "..(LP.Data:FindFirstChild("World") and LP.Data.World.Value or "?")
             )
@@ -128,25 +152,23 @@ task.spawn(function()
     end
 end)
 
---// ================== STOCK FRUIT NOTIFIER ==================
-local lastStockHash = ""
+--// ================== STOCK FRUIT ==================
+local lastStock = ""
 task.spawn(function()
     while task.wait(CHECK_STOCK_DELAY) do
         pcall(function()
-            local fruits =
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("GetFruits")
+            local fruits = ReplicatedStorage.Remotes.CommF_:InvokeServer("GetFruits")
             if not fruits then return end
 
             local list = ""
             for _,f in pairs(fruits) do
                 if f.OnSale then
-                    list ..= "🍎 **"..f.Name.."** – $"..f.Price.."\n"
+                    list ..= "🍎 "..f.Name.." $"..f.Price.."\n"
                 end
             end
 
-            local hash = HttpService:GenerateGUID(false)..list
-            if hash ~= lastStockHash and list ~= "" then
-                lastStockHash = hash
+            if list ~= "" and list ~= lastStock then
+                lastStock = list
                 SendWebhook("🛒 STOCK TRÁI ÁC QUỶ", list)
             end
         end)
