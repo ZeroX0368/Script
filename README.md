@@ -8,6 +8,6 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroX0368/Script/refs
 
 https://wrdcdn.net/r/103473/1769404797647/JJSploit-arm64vng.apk
 
-https://ads.quartyz.com/linkvertise?hash=SFJnQdd2dkeDu3v6P6khgus0YRmO3mYroFL7tX77tRvChba1Cs8C2OLRCa1Utxgs
+loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/85e904ae1ff30824c1aa007fc7324f8f.lua"))()
 
 https://wearedevs.net/d/Krnl
