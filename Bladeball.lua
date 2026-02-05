@@ -1,204 +1,135 @@
---====================================================
--- ZEROX | FULL MARU HUB STYLE (SEA 1-2-3)
---====================================================
-
---================ SERVICES =================
-local Players = game:GetService("Players")
+--// SERVICES
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualUser = game:GetService("VirtualUser")
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 
-local LP = Players.LocalPlayer
-local CommF = ReplicatedStorage.Remotes.CommF_
-
-local request =
+--// HTTP REQUEST
+local requestFunc =
     (syn and syn.request)
     or (http and http.request)
     or http_request
     or (fluxus and fluxus.request)
-    or request
 
---================ CONFIG ===================
-getgenv().CFG = {
-    AutoFarm = false,
-    AutoQuest = true,
-    BringMob = true,
-    AutoHaki = true,
-    AutoStat = true,
-    FarmBoss = false,
-    AutoRaid = false,
-    Weapon = "Melee",
-    Webhook = "https://discord.com/api/webhooks/1370529951052468295/KYT9QTHy5rrsYAkwKpMKeeYO4Db5X9YkrT5qOrudk0SGcyIbXsHO4s1tLAPHQL77k0fK",
-    StatPriority = {"Melee","Defense","DevilFruit"}
-}
-
---================ ANTI AFK =================
-LP.Idled:Connect(function()
-    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-    task.wait(1)
-    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-end)
-
---================ SEA DETECT ==============
-local function GetSea()
-    if workspace.Map:FindFirstChild("Dressrosa") then return 2 end
-    if workspace.Map:FindFirstChild("CastleOnTheSea") then return 3 end
-    return 1
+if not requestFunc then
+    warn("❌ Executor không hỗ trợ HttpRequest")
+    return
 end
 
---================ QUEST DATA (FULL RÚT GỌN) ==========
-local QuestData = {
-    [1] = {
-        {Min=1,Max=60,Quest="BanditQuest1",Mob="Bandit"},
-        {Min=60,Max=150,Quest="DesertQuest",Mob="Desert Bandit"},
-    },
-    [2] = {
-        {Min=700,Max=900,Quest="Area1Quest",Mob="Raider"},
-        {Min=900,Max=1200,Quest="Area2Quest",Mob="Mercenary"},
-    },
-    [3] = {
-        {Min=1500,Max=1800,Quest="PiratePortQuest",Mob="Pirate"},
-        {Min=1800,Max=2450,Quest="HauntedQuest1",Mob="Reborn Skeleton"},
+--// CONFIG
+local WEBHOOK_URL = "YOUR_WEBHOOK_HERE"
+local CHECK_INTERVAL = 10
+
+local THUMBNAIL_URL = "https://cdn.discordapp.com/avatars/1142053791781355561/e599a27cab1ca92a444ed2839adbb4f9.webp"
+local IMAGE_URL = "https://cdn.discordapp.com/banners/1205613504808357888/a_fef2751c07efa7a14abe0e968bdac50f.gif"
+
+--// STATE
+local lastStockString = ""
+local wasEmpty = false
+
+--// FORMAT NUMBER
+local function formatNumber(n)
+    local s = tostring(n)
+    return s:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+end
+
+--// GET CURRENT STOCK STRING
+local function getStockString(stock)
+    local list = {}
+    for _, fruit in pairs(stock) do
+        if fruit.OnSale then
+            table.insert(list, fruit.Name .. ":" .. fruit.Price)
+        end
+    end
+    table.sort(list)
+    return table.concat(list, "|"), list
+end
+
+--// SEND DISCORD
+local function sendWebhook(title, desc, stockList)
+    local playerCount = #Players:GetPlayers()
+
+    local data = {
+        embeds = {{
+            title = title,
+            description = desc,
+            color = 65280,
+            thumbnail = { url = THUMBNAIL_URL },
+            image = { url = IMAGE_URL },
+            fields = {
+                {
+                    name = "🍏 Fruits đang bán",
+                    value = stockList ~= "" and stockList or "❌ Shop trống",
+                    inline = false
+                },
+                {
+                    name = "🖥️ Server",
+                    value = "👥 Players: `" .. playerCount .. "`\n🆔 JobId: `" .. game.JobId .. "`",
+                    inline = false
+                }
+            },
+            footer = {
+                text = "Realtime Stock • " .. os.date("%d/%m/%Y %H:%M:%S")
+            }
+        }}
     }
-}
 
-local function GetQuest()
-    local sea = GetSea()
-    local lv = LP.Data.Level.Value
-    for _,q in pairs(QuestData[sea]) do
-        if lv >= q.Min and lv <= q.Max then
-            return q
-        end
-    end
+    requestFunc({
+        Url = WEBHOOK_URL,
+        Method = "POST",
+        Headers = { ["Content-Type"] = "application/json" },
+        Body = HttpService:JSONEncode(data)
+    })
 end
 
---================ AUTO QUEST ===============
-task.spawn(function()
-    while task.wait(1) do
-        if CFG.AutoFarm and CFG.AutoQuest then
-            if not LP.PlayerGui.Main.Quest.Visible then
-                local q = GetQuest()
-                if q then
-                    CommF:InvokeServer("StartQuest",q.Quest,1)
-                end
-            end
-        end
-    end
-end)
+--// MAIN CHECK
+local function checkStock()
+    local ok, data = pcall(function()
+        return ReplicatedStorage
+            :WaitForChild("Remotes")
+            :WaitForChild("CommF_")
+            :InvokeServer("GetFruits")
+    end)
 
---================ AUTO HAKI =================
-local function EnableHaki()
-    if not LP.Character:FindFirstChild("HasBuso") then
-        CommF:InvokeServer("Buso")
+    if not ok or not data then return end
+
+    local stockString, list = getStockString(data)
+    local count = #list
+
+    -- BUILD DISPLAY
+    local display = ""
+    for _, v in pairs(list) do
+        local name, price = v:match("(.+):(.+)")
+        display ..= "🍎 **" .. name .. "** — `$" .. formatNumber(price) .. "`\n"
     end
+
+    -- RESET DETECT
+    if wasEmpty and count > 0 then
+        sendWebhook(
+            "♻️ SHOP RESET DETECTED",
+            "🔄 **Shop vừa reset và có fruit mới!**",
+            display
+        )
+    end
+
+    -- CHANGE DETECT
+    if stockString ~= lastStockString then
+        sendWebhook(
+            "🛒 SHOP FRUIT CHANGED",
+            "📦 **Danh sách fruit shop vừa thay đổi!**",
+            display
+        )
+        lastStockString = stockString
+    end
+
+    wasEmpty = (count == 0)
 end
 
---================ EQUIP ====================
-local function Equip()
-    for _,v in pairs(LP.Backpack:GetChildren()) do
-        if v:IsA("Tool") and v.ToolTip == CFG.Weapon then
-            LP.Character.Humanoid:EquipTool(v)
-            break
-        end
-    end
-end
-
---================ BRING MOB ================
-local function Bring(name)
-    for _,m in pairs(workspace.Enemies:GetChildren()) do
-        if m.Name == name and m:FindFirstChild("HumanoidRootPart") then
-            m.HumanoidRootPart.CFrame =
-                LP.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,-4)
-            m.HumanoidRootPart.CanCollide = false
-        end
-    end
-end
-
---================ AUTO FARM CORE ===========
+--// LOOP
 task.spawn(function()
-    while task.wait() do
-        if CFG.AutoFarm then
-            pcall(function()
-                local q = GetQuest()
-                if not q then return end
-                if CFG.AutoHaki then EnableHaki() end
-                Equip()
-
-                for _,mob in pairs(workspace.Enemies:GetChildren()) do
-                    if mob.Name == q.Mob and mob.Humanoid.Health > 0 then
-                        repeat
-                            LP.Character.HumanoidRootPart.CFrame =
-                                mob.HumanoidRootPart.CFrame * CFrame.new(0,0,3)
-                            if CFG.BringMob then Bring(q.Mob) end
-                            mob.Humanoid.Health = 0
-                            task.wait(0.15)
-                        until mob.Humanoid.Health <= 0 or not CFG.AutoFarm
-                    end
-                end
-            end)
-        end
+    while task.wait(CHECK_INTERVAL) do
+        checkStock()
     end
 end)
 
---================ AUTO STAT ================
-task.spawn(function()
-    while task.wait(2) do
-        if CFG.AutoStat and LP.Data.Points.Value > 0 then
-            for _,s in pairs(CFG.StatPriority) do
-                CommF:InvokeServer("AddPoint",s,1)
-                task.wait(0.25)
-            end
-        end
-    end
-end)
-
---================ AUTO STOCK DISCORD =======
-local lastHash = nil
-task.spawn(function()
-    while task.wait(300) do
-        if request then
-            local fruits = CommF:InvokeServer("GetFruits")
-            local list = {}
-            for _,f in pairs(fruits) do
-                if f.OnSale then
-                    table.insert(list,"🍎 "..f.Name.." - $"..f.Price)
-                end
-            end
-            table.sort(list)
-            local hash = table.concat(list,"|")
-            if hash ~= lastHash then
-                lastHash = hash
-                request({
-                    Url = CFG.Webhook,
-                    Method = "POST",
-                    Headers = {["Content-Type"]="application/json"},
-                    Body = HttpService:JSONEncode({
-                        embeds={{
-                            title="🛒 BLOX FRUITS STOCK UPDATE",
-                            description=table.concat(list,"\n"),
-                            color=65280,
-                            footer={text="JobId: "..game.JobId}
-                        }}
-                    })
-                })
-            end
-        end
-    end
-end)
-
---================ UI (MARU STYLE) ==========
-local UI = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"
-))()
-
-local Win = UI.CreateLib("ZeroX | Maru Hub FULL", "DarkTheme")
-local Main = Win:NewTab("Main"):NewSection("Auto Farm")
-
-Main:NewToggle("Auto Farm", "", function(v) CFG.AutoFarm = v end)
-Main:NewToggle("Auto Quest", "", function(v) CFG.AutoQuest = v end)
-Main:NewToggle("Bring Mob", "", function(v) CFG.BringMob = v end)
-Main:NewToggle("Auto Stat", "", function(v) CFG.AutoStat = v end)
-
-Main:NewDropdown("Weapon","",{"Melee","Sword","Fruit"},function(v)
-    CFG.Weapon = v
-end)
+--// FIRST RUN
+checkStock()
