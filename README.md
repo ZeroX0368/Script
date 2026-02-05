@@ -11,6 +11,9 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroX0368/Script/refs
 
 king lagacy loadstring(game:HttpGet('https://zuwz.me/Ls-Zee-Hub-KL'))()
 
+blade ball 
+loadstring(game:HttpGet("https://raw.githubusercontent.com/3345-c-a-t-s-u-s/-beta-/main/AutoParry.lua"))()
+
 https://wearedevs.net/d/Krnl
 
 https://robscript.com/king-legacy-scripts/
