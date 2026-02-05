@@ -16,7 +16,7 @@ if not requestFunc then
 end
 
 --// CONFIG
-local WEBHOOK_URL = "YOUR_WEBHOOK_HERE"
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT"
 local CHECK_INTERVAL = 10
 
 local THUMBNAIL_URL = "https://cdn.discordapp.com/avatars/1142053791781355561/e599a27cab1ca92a444ed2839adbb4f9.webp"
