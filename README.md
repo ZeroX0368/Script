@@ -14,3 +14,5 @@ https://wearedevs.net/d/Krnl
 https://robscript.com/king-legacy-scripts/
 
 https://deltaexploits.gg/delta-executor-android
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/MEOW-HUB-DEV/SCRIPT-FREE/refs/heads/main/MeowKaitun.lua"))()
