@@ -1,0 +1,1 @@
+local Settings = {     JoinTeam = "Pirates";     Translator = true; }  loadstring(game:HttpGet("https://raw.githubusercontent.com/MEOW-HUB-DEV/SCRIPT-FREE/refs/heads/main/MeowKaitun.lua"))(Settings)
