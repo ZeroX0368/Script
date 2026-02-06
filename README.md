@@ -12,3 +12,5 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroX0368/Script/refs
 https://wearedevs.net/d/Krnl
 
 https://robscript.com/king-legacy-scripts/
+
+https://deltaexploits.gg/delta-executor-android
