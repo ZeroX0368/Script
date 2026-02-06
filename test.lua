@@ -12,15 +12,15 @@ local RunService = game:GetService("RunService")
 -- WEBHOOKS CONFIGURADOS
 ------------------------------------------------------------
 local Webhooks = {
-    FruitsSpawned    = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
-    RareBoss         = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
-    MiragemIsland    = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
-    KitsuneIsland    = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
-    PrehistoricIsland= "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
-    LegendHaki       = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
-    LegendSword      = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
-    FullMoon         = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
-    NearFullMoon     = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk"
+    FruitsSpawned    = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
+    RareBoss         = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
+    MiragemIsland    = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
+    KitsuneIsland    = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
+    PrehistoricIsland= "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
+    LegendHaki       = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
+    LegendSword      = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
+    FullMoon         = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
+    NearFullMoon     = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT"
 }
 
 ------------------------------------------------------------
@@ -250,23 +250,23 @@ end
 
 print("✅ Sistema de Notificações Discord pronto para uso!")
     LegendSword = {
-        webhookUrl = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
+        webhookUrl = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
         title      = "🗡️ Legend Sword",
         color      = 0x6E4C38, -- #6E4C38
     },
     RareBoss = {
-        webhookUrl = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
+        webhookUrl = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
         title      = "👹 Rare Boss Spawned",
         color      = 0xE95F5D, -- #E95F5D
         thumbnail  = "https://i.imgur.com/boss_icon.png"
     },
     FruitsSpawned = {
-        webhookUrl = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
+        webhookUrl = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
         title      = "🍍 Fruits Spawned",
         color      = 0xFFB90F, -- #FFB90F
     },
     FullMoon = {
-        webhookUrl = "https://discord.com/api/webhooks/1410825485881184358/JSzNwMHMsKSl69bLOC5Ogdt5wgPrm4jWkbBuk6nx36Vb0fKpvrFj53sRK5i1GxDRL2wk",
+        webhookUrl = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT",
         title      = "🌕 Full Moon",
         color      = 0xEEEEEE, -- #EEEEEE
     },
