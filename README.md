@@ -16,3 +16,5 @@ https://robscript.com/king-legacy-scripts/
 https://www.mediafire.com/file/bkfzq844etemv08/Delta_VNG_V2.706.750_Up.apk/file
 
 local Settings = {     JoinTeam = "Pirates";     Translator = true; }  loadstring(game:HttpGet("https://raw.githubusercontent.com/MEOW-HUB-DEV/SCRIPT-FREE/refs/heads/main/MeowKaitun.lua"))(Settings)
+
+FREE_90baf81e8108c76ac1b42b31b22fb0d0
