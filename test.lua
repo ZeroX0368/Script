@@ -1,81 +1,184 @@
--- Blox Fruit Shop Stock Notifier
--- This script monitors the fruit shop and sends notifications to a Discord Webhook
-
-local WebhookURL = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT" -- Replace with your Discord Webhook URL
-
-local HttpService = game:GetService("HttpService")
+--// SERVICES
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 
-local function sendWebhook(title, description, color)
-    local data = {
-        ["embeds"] = {{
-            ["title"] = title,
-            ["description"] = description,
-            ["color"] = color or 65280, -- Default green
-            ["footer"] = {
-                ["text"] = "Blox Fruit Stock Notifier"
-            },
-            ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
-        }}
-    }
-    
-    local success, err = pcall(function()
-        HttpService:PostAsync(WebhookURL, HttpService:JSONEncode(data))
-    end)
-    
-    if not success then
-        warn("Failed to send webhook: " .. tostring(err))
+--// HTTP REQUEST
+local requestFunc =
+    (syn and syn.request)
+    or (http and http.request)
+    or http_request
+    or (fluxus and fluxus.request)
+
+if not requestFunc then
+    requestFunc = function(options)
+        local success, result = pcall(function()
+            return HttpService:PostAsync(options.Url, options.Body, Enum.HttpContentType.ApplicationJson)
+        end)
+        return { Success = success, Body = result }
     end
 end
 
-local function checkStock()
-    -- Blox Fruit shop logic typically involves Remotes or checking specific folders
-    -- This is a template logic as the actual game structure is protected/complex
-    local shopItems = {}
-    
-    -- Attempt to get stock from ReplicatedStorage or typical Blox Fruit remotes
-    local success, stockData = pcall(function()
-        -- Using common remote name for shop data if available
-        return ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer("GetShopFruits")
+--// CONFIG
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1353511267889053767/AAHMBVG7vyD0SHEFK3pYf8sxsYS9_MEbQhINx_c1ASJbG_1fMrMlo8EvCaeGcF5wulcT"
+
+local THUMBNAIL_URL = "https://cdn.discordapp.com/avatars/1142053791781355561/e599a27cab1ca92a444ed2839adbb4f9.webp?size=1024"
+local IMAGE_URL = "https://cdn.discordapp.com/banners/1205613504808357888/a_fef2751c07efa7a14abe0e968bdac50f.gif?size=2048"
+
+local CHECK_INTERVAL = 60
+local SEND_COOLDOWN = 4 * 60 * 60 -- 4 giờ
+
+--// STATE
+local lastStockHash = nil
+local lastSendTime = 0
+local lastResetTime = 0
+
+--// FORMAT NUMBER
+local function formatNumber(n)
+    local s = tostring(n)
+    return s:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+end
+
+--// HASH STOCK
+local function getStockHash(stockTable)
+    local list = {}
+    for _, fruit in pairs(stockTable) do
+        if fruit.OnSale then
+            table.insert(list, fruit.Name .. ":" .. fruit.Price)
+        end
+    end
+    table.sort(list)
+    return table.concat(list, "|")
+end
+
+--// MAIN
+local function sendToDiscord()
+    local success, fruitData = pcall(function()
+        return ReplicatedStorage
+            :WaitForChild("Remotes")
+            :WaitForChild("CommF_")
+            :InvokeServer("GetFruits")
     end)
 
-    if success and stockData then
-        local stockList = ""
-        for _, fruit in pairs(stockData) do
-            if fruit.OnSale then
-                stockList = stockList .. "🍎 **" .. tostring(fruit.Name) .. "** - Price: " .. tostring(fruit.Price) .. "\n"
-            end
+    if not success or not fruitData then
+        warn("❌ Không thể lấy dữ liệu stock")
+        return
+    end
+
+    -- COUNT
+    local count = 0
+    for _, fruit in pairs(fruitData) do
+        if fruit.OnSale then
+            count = count + 1
+        end
+    end
+
+    -- HASH
+    local currentHash = getStockHash(fruitData)
+
+    -- DETECT RESET
+    local isReset = false
+    if lastStockHash ~= nil and currentHash ~= lastStockHash and count > 0 then
+        isReset = true
+        warn("♻️ RESET STOCK detected")
+    end
+
+    -- logic gửi notify:
+    -- 1. Nếu là Reset (stock thay đổi và không trống) -> Gửi luôn
+    -- 2. Nếu không phải Reset:
+    --    - Kiểm tra hash cũ (tránh spam khi không đổi)
+    --    - Kiểm tra cooldown 4h
+    
+    if not isReset then
+        if currentHash == lastStockHash then
+            warn("⚠️ Stock không đổi → bỏ qua")
+            return
         end
         
-        if stockList ~= "" then
-            sendWebhook("Shop Stock Updated", "Current fruits in shop:\n\n" .. stockList, 3447003)
-        end
-    else
-        -- Fallback: If remote not found, try to look for UI or folder-based stock
-        local fruitStock = ReplicatedStorage:FindFirstChild("FruitStock")
-        if fruitStock then
-            local stockList = ""
-            for _, fruit in pairs(fruitStock:GetChildren()) do
-                stockList = stockList .. "🍎 **" .. fruit.Name .. "**\n"
-            end
-            if stockList ~= "" then
-                sendWebhook("Shop Stock Updated (Folder View)", "Current fruits in shop:\n\n" .. stockList, 3447003)
-            end
-        else
-            warn("Could not fetch shop data. Ensure you are using a compatible executor and in-game.")
+        if os.time() - lastSendTime < SEND_COOLDOWN then
+            warn("⏳ Chưa đủ 4h → không gửi")
+            return
         end
     end
+
+    if count == 0 then
+        warn("⚠️ Shop đang trống")
+        lastStockHash = currentHash
+        return
+    end
+
+    lastStockHash = currentHash
+    lastSendTime = os.time()
+
+    -- BUILD LIST
+    local stockList = ""
+    for _, fruit in pairs(fruitData) do
+        if fruit.OnSale then
+            stockList = stockList .. "🍎 **" .. fruit.Name ..
+                "** — `$" .. formatNumber(fruit.Price) .. "`\n"
+        end
+    end
+
+    -- SERVER INFO
+    local playerCount = #Players:GetPlayers()
+    local maxPlayers = Players.MaxPlayers
+    local jobId = game.JobId
+
+    -- EMBED
+    local data = {
+        embeds = {{
+            title = isReset
+                and "♻️ BLOX FRUITS STOCK RESET"
+                or "🛒 BLOX FRUITS STOCK UPDATE",
+
+            description = isReset
+                and "🔄 **Shop vừa mới Reset Stock!**"
+                or "📦 **Danh sách trái đang bán hiện tại:**",
+
+            color = isReset and 16753920 or 65280,
+
+            thumbnail = { url = THUMBNAIL_URL },
+            image = { url = IMAGE_URL },
+
+            fields = {
+                {
+                    name = "🍏 Danh sách Trái (" .. count .. " loại)",
+                    value = stockList,
+                    inline = false
+                },
+                {
+                    name = "🖥️ Server Info",
+                    value =
+                        "🆔 **JobId:** `" .. jobId .. "`\n" ..
+                        "👥 **Players:** `" .. playerCount .. "/" .. maxPlayers .. "`",
+                    inline = false
+                }
+            },
+
+            footer = {
+                text = "⚡ Stock Notifier • " .. os.date("%d/%m/%Y %H:%M:%S")
+            }
+        }}
+    }
+
+    task.wait(1)
+    requestFunc({
+        Url = WEBHOOK_URL,
+        Method = "POST",
+        Headers = { ["Content-Type"] = "application/json" },
+        Body = HttpService:JSONEncode(data)
+    })
+
+    print("✅ Đã gửi stock lên Discord" .. (isReset and " (RESET MODE)" or ""))
 end
 
--- Notify when script starts
-sendWebhook("Notifier Started", "Blox Fruit Stock Notifier is now running!", 16776960)
-
--- Check stock every 15 minutes
-spawn(function()
+--// LOOP
+task.spawn(function()
     while true do
-        checkStock()
-        wait(900) -- 15 minutes
+        sendToDiscord()
+        task.wait(CHECK_INTERVAL)
     end
 end)
 
-print("Blox Fruit Shop Stock Notifier loaded!")
+--// FIRST RUN
+sendToDiscord()
