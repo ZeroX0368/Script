@@ -2,6 +2,7 @@
 ```bash
 io0lfae@concu.net
 ```
+https://pastefy.app/KXxJlK91/raw
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroX0368/Script/refs/heads/main/blox-fruit-ui.lua"))()
 
