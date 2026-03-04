@@ -125,7 +125,7 @@ local function sendToDiscord()
     pcall(function()
         local success, result = pcall(function()
             return requestFunc({
-                Url = "http://localhost:3000/api/update-stock",
+                Url = "http://51.68.234.157:20369/api/update-stock",
                 Method = "POST",
                 Headers = { ["Content-Type"] = "application/json" },
                 Body = HttpService:JSONEncode(apiData)
