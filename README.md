@@ -6,7 +6,7 @@ https://pastefy.app/KXxJlK91/raw
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroX0368/Script/refs/heads/main/blox-fruit-ui.lua"))()
 
-https://wrdcdn.net/r/103473/1771262656395/JJSploit_VNG_64Bits-2.707.735.apk
+https://www.mediafire.com/file/pu5of4n3no09pzd/Delta_VNG_v2.710.706.apk/file
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroX0368/Script/refs/heads/main/Bloxfruit.lua"))()
 
