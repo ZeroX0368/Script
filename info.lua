@@ -32,170 +32,164 @@ local SEND_COOLDOWN = 4 * 60 * 60 -- 4 giờ
 local lastStockHash = nil
 local lastSendTime = 0
 local lastResetTime = 0
+local sentItems = {} -- Anti-duplicate cache
 
---// FORMAT NUMBER
-local function formatNumber(n)
-    local s = tostring(n)
-    return s:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+--// UTILS
+local function getInventory()
+    local success, inventory = pcall(function()
+        return ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer("getInventory")
+    end)
+    return success and inventory or {}
 end
 
---// HASH STOCK
-local function getStockHash(stockTable)
-    local list = {}
-    for _, fruit in pairs(stockTable) do
-        if fruit.OnSale then
-            table.insert(list, fruit.Name .. ":" .. fruit.Price)
+local function serverHop()
+    local HttpService = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    local success, servers = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")).data
+    end)
+    
+    if success then
+        for _, server in pairs(servers) do
+            if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id)
+                break
+            end
         end
     end
-    table.sort(list)
-    return table.concat(list, "|")
+end
+
+--// SCANNING LOGIC
+local function scanServer()
+    -- Legendary Sword Dealer
+    local success, dealer = pcall(function() return game.ReplicatedStorage.Remotes.CommF_:InvokeServer("LegendarySwordDealer", "Check") end)
+    if success and dealer and dealer ~= "Left" then 
+        sendToDiscord("Sword", { name = tostring(dealer) }) 
+    end
+    
+    -- Legendary Haki (Color Specialist)
+    local success, haki = pcall(function() return game.ReplicatedStorage.Remotes.CommF_:InvokeServer("ColorSpecialist", "Check") end)
+    if success and haki then 
+        sendToDiscord("Haki", { name = tostring(haki) }) 
+    end
+    
+    -- Soul Reaper
+    local success, bone = pcall(function() return game.ReplicatedStorage.Remotes.CommF_:InvokeServer("Bones", "Check") end)
+    if success and bone then 
+        sendToDiscord("Boss", { name = "Soul Reaper" }) 
+    end
+    
+    -- Mirage Island
+    if game.Workspace:FindFirstChild("Mirage Island") then
+        sendToDiscord("Mirage", { time = os.date("%X") })
+    end
 end
 
 --// MAIN
-local function sendToDiscord()
-    local success, fruitData = pcall(function()
-        return ReplicatedStorage
-            :WaitForChild("Remotes")
-            :WaitForChild("CommF_")
-            :InvokeServer("GetFruits")
-    end)
-
-    if not success or not fruitData then
-        warn("❌ Không thể lấy dữ liệu stock")
-        return
-    end
-
-    -- COUNT
-    local count = 0
-    for _, fruit in pairs(fruitData) do
-        if fruit.OnSale then
-            count = count + 1
-        end
-    end
-
-    -- HASH
-    local currentHash = getStockHash(fruitData)
-
-    -- DETECT RESET
-    local isReset = false
-    if lastStockHash ~= nil and currentHash ~= lastStockHash and count > 0 then
-        isReset = true
-        warn("♻️ RESET STOCK detected")
-    end
-
-    -- logic gửi notify:
-    -- 1. Nếu là Reset (stock thay đổi và không trống) -> Gửi luôn
-    -- 2. Nếu không phải Reset:
-    --    - Kiểm tra hash cũ (tránh spam khi không đổi)
-    --    - Kiểm tra cooldown 4h
-    
-    if not isReset then
-        if currentHash == lastStockHash then
-            warn("⚠️ Stock không đổi → bỏ qua")
-            return
-        end
-        
-        if os.time() - lastSendTime < SEND_COOLDOWN then
-            warn("⏳ Chưa đủ 4h → không gửi")
-            return
-        end
-    end
-
-    if count == 0 then
-        warn("⚠️ Shop đang trống")
-        lastStockHash = currentHash
-        return
-    end
-
-    lastStockHash = currentHash
-    lastSendTime = os.time()
-
-    -- BUILD LIST
-    local stockList = ""
-    local apiData = {}
-    for _, fruit in pairs(fruitData) do
-        if fruit.OnSale then
-            stockList = stockList .. "🍎 **" .. fruit.Name ..
-                "** — `$" .. formatNumber(fruit.Price) .. "`\n"
-            table.insert(apiData, {name = fruit.Name, price = fruit.Price})
-        end
-    end
-
-    -- Update Node.js API
-    pcall(function()
-        local success, result = pcall(function()
-            return requestFunc({
-                Url = "http://51.68.234.157:20369/api/update-stock",
-                Method = "POST",
-                Headers = { ["Content-Type"] = "application/json" },
-                Body = HttpService:JSONEncode(apiData)
-            })
-        end)
-        if not success then
-            warn("❌ Failed to update Node.js API: " .. tostring(result))
-        end
-    end)
-
-    -- SERVER INFO
-    local playerCount = #Players:GetPlayers()
-    local maxPlayers = Players.MaxPlayers
-    local jobId = game.JobId
-
-    -- EMBED
-    local data = {
-        embeds = {{
-            title = isReset
-                and "♻️ BLOX FRUITS STOCK RESET"
-                or "🛒 BLOX FRUITS STOCK UPDATE",
-
-            description = isReset
-                and "🔄 **Shop vừa mới Reset Stock!**"
-                or "📦 **Danh sách trái đang bán hiện tại:**",
-
-            color = isReset and 16753920 or 65280,
-
-            thumbnail = { url = THUMBNAIL_URL },
-            image = { url = IMAGE_URL },
-
-            fields = {
-                {
-                    name = "🍏 Danh sách Trái (" .. count .. " loại)",
-                    value = stockList,
-                    inline = false
-                },
-                {
-                    name = "🖥️ Server Info",
-                    value =
-                        "🆔 **JobId:** `" .. jobId .. "`\n" ..
-                        "👥 **Players:** `" .. playerCount .. "/" .. maxPlayers .. "`",
-                    inline = false
-                }
-            },
-
-            footer = {
-                text = "⚡ Stock Notifier • " .. os.date("%d/%m/%Y %H:%M:%S")
-            }
-        }}
+local function sendToDiscord(type, data)
+    local embed = {
+        footer = { text = "Humzy Notify | " .. os.date("%d/%m/%Y %H:%M") },
+        fields = {}
     }
 
-    task.wait(1)
+    if type == "Sword" then
+        embed.title = "Sword Legendary"
+        embed.color = 0x800080 -- Purple
+        table.insert(embed.fields, { name = "Swords Name :", value = data.name or "Unknown", inline = false })
+    elseif type == "Haki" then
+        embed.title = "Haki Legendary"
+        embed.color = 0x483D8B -- DarkSlateBlue
+        table.insert(embed.fields, { name = "Colors Name :", value = data.name or "Unknown", inline = false })
+        table.insert(embed.fields, { name = "World :", value = tostring(data.world or "3"), inline = false })
+    elseif type == "Boss" then
+        embed.title = "Common Boss"
+        embed.color = 0x008000 -- Green
+        table.insert(embed.fields, { name = "Boss Name :", value = data.name or "Soul Reaper", inline = false })
+    elseif type == "Mirage" then
+        embed.title = "Mirage Island"
+        embed.color = 0xFF8C00 -- DarkOrange
+        table.insert(embed.fields, { name = "🏝️ Spawn :", value = "🟢", inline = false })
+        table.insert(embed.fields, { name = "⚪ Time Of Day :", value = data.time or os.date("%X"), inline = false })
+    elseif type == "Stock" then
+        embed.title = "🛒 Current Stock"
+        embed.color = 0x00FF00
+        table.insert(embed.fields, { name = "🍏 Stock List", value = data.list or "No stock", inline = false })
+    end
+
+    table.insert(embed.fields, { name = "Players :", value = #Players:GetPlayers() .. "/" .. Players.MaxPlayers, inline = false })
+    table.insert(embed.fields, { name = "Job-Id :", value = game.JobId, inline = false })
+    table.insert(embed.fields, { 
+        name = "Script :", 
+        value = "```lua\ngame:GetService(\"ReplicatedStorage\").__ServerBrowser:InvokeServer(\"teleport\", \"" .. game.JobId .. "\")\n```", 
+        inline = false 
+    })
+
     requestFunc({
         Url = WEBHOOK_URL,
         Method = "POST",
         Headers = { ["Content-Type"] = "application/json" },
-        Body = HttpService:JSONEncode(data)
+        Body = HttpService:JSONEncode({ embeds = { embed } })
     })
+end
 
-    print("✅ Đã gửi stock lên Discord" .. (isReset and " (RESET MODE)" or ""))
+local function scanServer()
+    -- Legendary Sword Dealer
+    local success, dealer = pcall(function() return game.ReplicatedStorage.Remotes.CommF_:InvokeServer("LegendarySwordDealer", "Check") end)
+    if success and dealer and dealer ~= "Left" then 
+        sendToDiscord("Sword", { name = tostring(dealer) }) 
+    end
+    
+    -- Legendary Haki (Color Specialist)
+    local success, haki = pcall(function() return game.ReplicatedStorage.Remotes.CommF_:InvokeServer("ColorSpecialist", "Check") end)
+    if success and haki then 
+        sendToDiscord("Haki", { name = tostring(haki) }) 
+    end
+    
+    -- Soul Reaper
+    local success, bone = pcall(function() return game.ReplicatedStorage.Remotes.CommF_:InvokeServer("Bones", "Check") end)
+    if success and bone then 
+        sendToDiscord("Boss", { name = "Soul Reaper" }) 
+    end
+    
+    -- Mirage Island
+    if game.Workspace:FindFirstChild("Mirage Island") then
+        sendToDiscord("Mirage", { time = os.date("%X") })
+    end
+
+    -- Stock
+    local fruitSuccess, fruitData = pcall(function()
+        return ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer("GetFruits")
+    end)
+    if fruitSuccess and fruitData then
+        local stockList = ""
+        local currentHashList = {}
+        for _, fruit in pairs(fruitData) do
+            if fruit.OnSale then
+                stockList = stockList .. "🍎 **" .. fruit.Name .. "** — `$" .. formatNumber(fruit.Price) .. "`\n"
+                table.insert(currentHashList, fruit.Name)
+            end
+        end
+        table.sort(currentHashList)
+        local currentHash = table.concat(currentHashList, "|")
+        
+        if currentHash ~= lastStockHash then
+            lastStockHash = currentHash
+            sendToDiscord("Stock", { list = stockList })
+        end
+    end
+
+    print("✅ Scan complete. Hopping...")
+    task.wait(2)
+    serverHop()
 end
 
 --// LOOP
 task.spawn(function()
     while true do
-        sendToDiscord()
+        scanServer()
         task.wait(CHECK_INTERVAL)
     end
 end)
 
 --// FIRST RUN
-sendToDiscord()
+scanServer()
