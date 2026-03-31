@@ -1,0 +1,262 @@
+import discord
+from discord.ext import commands, tasks
+from discord import app_commands
+import aiohttp
+import json
+import os
+
+TOKEN = "YOUR_TOKEN"
+API_URL = "http://51.83.6.7:20277/api/stock"
+
+OWNER_IDS = [123456789012345678]
+
+intents = discord.Intents.default()
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+DB_FILE = "alerts.json"
+
+# ================= DATABASE =================
+def load_db():
+    if not os.path.exists(DB_FILE):
+        return {}
+    with open(DB_FILE, "r") as f:
+        return json.load(f)
+
+def save_db(data):
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+# ================= FETCH =================
+async def fetch_stock():
+    async with aiohttp.ClientSession() as session:
+        async with session.get(API_URL) as res:
+            return await res.json()
+
+# ================= PERMISSIONS =================
+def has_perms(interaction: discord.Interaction):
+    p = interaction.user.guild_permissions
+    return (
+        p.manage_channels and
+        p.manage_webhooks and
+        p.send_messages and
+        p.manage_roles
+    )
+
+# ================= COOLDOWN KEYS =================
+def cooldown_user(interaction: discord.Interaction):
+    if interaction.user.id in OWNER_IDS:
+        return None
+    return interaction.user.id
+
+def cooldown_guild(interaction: discord.Interaction):
+    if interaction.user.id in OWNER_IDS:
+        return None
+    return interaction.guild.id if interaction.guild else interaction.user.id
+
+# ================= UI =================
+def ui(text: str):
+    v = discord.ui.LayoutView()
+    c = discord.ui.Container()
+    c.add_item(discord.ui.TextDisplay(text))
+    v.add_item(c)
+    return v
+
+# ================= STOCK VIEW =================
+def build_stock(data):
+    v = discord.ui.LayoutView()
+    c = discord.ui.Container()
+
+    provider = data.get("provider", "Unknown")
+    timers = data.get("timers", {})
+
+    c.add_item(discord.ui.TextDisplay(
+        f"# 🍎 BLOXFRUIT LIVE STOCK\nProvider: **{provider}**"
+    ))
+
+    mirage = data["data"]["mirage_stock"]
+    txt = "## 🏝 Mirage Stock\n"
+    for f in mirage:
+        txt += f"• **{f['name']}** — {f['price_beli']:,}\n"
+    c.add_item(discord.ui.TextDisplay(txt))
+
+    normal = data["data"]["normal_stock"]
+    txt2 = "## 🛒 Normal Stock\n"
+    for f in normal:
+        txt2 += f"• **{f['name']}** — {f['price_beli']:,}\n"
+    c.add_item(discord.ui.TextDisplay(txt2))
+
+    c.add_item(discord.ui.TextDisplay(
+        f"⏰ Mirage Reset: `{timers.get('mirage_reset_in')}`\n"
+        f"🛒 Normal Reset: `{timers.get('normal_reset_in')}`"
+    ))
+
+    gallery = [discord.ui.MediaGalleryItem(media=f["image_url"]) for f in mirage[:5]]
+    c.add_item(discord.ui.MediaGallery(*gallery))
+
+    v.add_item(c)
+    return v
+
+# ================= COMMAND =================
+@bot.tree.command(name="stock", description="Show live stock")
+@app_commands.checks.cooldown(1, 5, key=cooldown_user)
+async def stock(interaction: discord.Interaction):
+    await interaction.response.defer()
+    data = await fetch_stock()
+    await interaction.followup.send(view=build_stock(data))
+
+# ================= ALERTS =================
+alerts = app_commands.Group(
+    name="alerts",
+    description="Stock alert system",
+    default_permissions=discord.Permissions(
+        manage_channels=True,
+        manage_webhooks=True,
+        send_messages=True,
+        manage_roles=True
+    )
+)
+bot.tree.add_command(alerts)
+
+# ================= /alerts set =================
+@alerts.command(name="set", description="Set alert channel")
+@app_commands.checks.cooldown(1, 10, key=cooldown_guild)
+async def alerts_set(interaction: discord.Interaction,
+                     stock_type: str,
+                     channel: discord.TextChannel):
+
+    if not has_perms(interaction):
+        return await interaction.response.send_message(view=ui("❌ Missing permissions"), ephemeral=True)
+
+    stock_type = stock_type.lower()
+    if stock_type not in ["normal", "mirage"]:
+        return await interaction.response.send_message(view=ui("❌ Use normal/mirage"), ephemeral=True)
+
+    db = load_db()
+    gid = str(interaction.guild.id)
+
+    if gid not in db:
+        webhook = await channel.create_webhook(name="BloxFruit • Live Stock Bot")
+
+        db[gid] = {
+            "channel": channel.id,
+            "webhook_url": webhook.url,
+            "types": [stock_type]
+        }
+    else:
+        if stock_type not in db[gid]["types"]:
+            db[gid]["types"].append(stock_type)
+
+    save_db(db)
+
+    await interaction.response.send_message(view=ui(f"✅ Added `{stock_type}` alerts"), ephemeral=True)
+
+# ================= /alerts remove =================
+@alerts.command(name="remove", description="Remove alert type")
+@app_commands.checks.cooldown(1, 5, key=cooldown_guild)
+async def alerts_remove(interaction: discord.Interaction, stock_type: str):
+
+    if not has_perms(interaction):
+        return await interaction.response.send_message(view=ui("❌ Missing permissions"), ephemeral=True)
+
+    db = load_db()
+    gid = str(interaction.guild.id)
+
+    stock_type = stock_type.lower()
+
+    if gid in db and stock_type in db[gid]["types"]:
+        db[gid]["types"].remove(stock_type)
+
+    save_db(db)
+
+    await interaction.response.send_message(view=ui(f"🗑 Removed `{stock_type}`"), ephemeral=True)
+
+# ================= /alerts list =================
+@alerts.command(name="list", description="List alerts")
+@app_commands.checks.cooldown(1, 3, key=cooldown_user)
+async def alerts_list(interaction: discord.Interaction):
+
+    db = load_db()
+    gid = str(interaction.guild.id)
+
+    if gid not in db:
+        return await interaction.response.send_message(view=ui("❌ No configuration"), ephemeral=True)
+
+    data = db[gid]
+
+    text = (
+        f"## 📢 Alerts\n"
+        f"Channel: <#{data['channel']}>\n"
+        f"Types: {', '.join(data['types'])}"
+    )
+
+    await interaction.response.send_message(view=ui(text), ephemeral=True)
+
+# ================= AUTO STOCK =================
+last_mirage = None
+last_normal = None
+
+@tasks.loop(minutes=1)
+async def auto_stock():
+    global last_mirage, last_normal
+
+    data = await fetch_stock()
+
+    mirage = data["data"]["mirage_stock"]
+    normal = data["data"]["normal_stock"]
+
+    db = load_db()
+
+    async with aiohttp.ClientSession() as session:
+        for gid, cfg in db.items():
+
+            send = False
+
+            if "mirage" in cfg["types"] and mirage != last_mirage:
+                send = True
+
+            if "normal" in cfg["types"] and normal != last_normal:
+                send = True
+
+            if not send:
+                continue
+
+            webhook = discord.Webhook.from_url(cfg["webhook_url"], session=session)
+
+            await webhook.send(
+                username="BloxFruit • Live Stock Bot",
+                view=build_stock(data)
+            )
+
+    last_mirage = mirage
+    last_normal = normal
+
+# ================= GLOBAL ERROR =================
+@bot.tree.error
+async def global_error(interaction: discord.Interaction, error):
+
+    if isinstance(error, app_commands.CommandOnCooldown):
+        retry = round(error.retry_after, 1)
+        v = ui(f"⏳ Cooldown: try again in `{retry}s`")
+
+    elif isinstance(error, app_commands.CheckFailure):
+        v = ui("❌ Missing permissions")
+
+    else:
+        v = ui(f"❌ Error: {str(error)}")
+
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(view=v, ephemeral=True)
+        else:
+            await interaction.response.send_message(view=v, ephemeral=True)
+    except:
+        pass
+
+# ================= READY =================
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+    await bot.tree.sync()
+    auto_stock.start()
+
+bot.run(TOKEN)
